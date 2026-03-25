@@ -41,7 +41,7 @@ public class WebViewActivity extends Activity {
     private static final String CONFIG_PATH = "config.json";
     // Virtual origin used for local assets — absolute paths and CSP 'self' work correctly.
     private static final String ASSET_HOST = "https://appassets.androidplatform.net";
-    private static final String ASSETS_INDEX = ASSET_HOST + "/index.html";
+    private static final String ASSETS_INDEX = ASSET_HOST + "/";
     // APK asset prefix that maps to the virtual origin root.
     private static final String ASSET_PREFIX = "www";
 
@@ -52,18 +52,17 @@ public class WebViewActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Fullscreen: hide status bar and navigation bar
-        getWindow().setFlags(
-            WindowManager.LayoutParams.FLAG_FULLSCREEN,
-            WindowManager.LayoutParams.FLAG_FULLSCREEN
-        );
-        getWindow().getDecorView().setSystemUiVisibility(
-            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-            | View.SYSTEM_UI_FLAG_FULLSCREEN
-            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        // Allow the WebView to resize when the soft keyboard appears.
+        // FLAG_FULLSCREEN must NOT be used — it silently disables SOFT_INPUT_ADJUST_RESIZE.
+        // The SYSTEM_UI_FLAG_FULLSCREEN flag below provides the same visual effect.
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        applyImmersiveMode();
+        getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(
+            visibility -> {
+                if ((visibility & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0) {
+                    applyImmersiveMode();
+                }
+            }
         );
 
         webView = new WebView(this);
@@ -75,6 +74,10 @@ public class WebViewActivity extends Activity {
         settings.setDatabaseEnabled(true);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+
+        // Inform WebView of device connectivity so navigator.onLine works correctly.
+        webView.setNetworkAvailable(true);
 
         // Register the native bridge for extensions
         webView.addJavascriptInterface(new NativeBridge(), "NativeBridge");
@@ -85,6 +88,22 @@ public class WebViewActivity extends Activity {
             public WebResourceResponse shouldInterceptRequest(WebView view,
                                                               WebResourceRequest request) {
                 return maybeServeAsset(request.getUrl());
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                // setNetworkAvailable(true) alone may not update navigator.onLine
+                // on all WebView versions. Inject JS to force the correct state and
+                // dispatch the 'online' event so apps relying on event listeners
+                // (e.g. React state) pick up the change.
+                view.evaluateJavascript(
+                    "if(!navigator.onLine){" +
+                    "Object.defineProperty(navigator,'onLine'," +
+                    "{get:function(){return true},configurable:true});" +
+                    "window.dispatchEvent(new Event('online'));" +
+                    "}",
+                    null
+                );
             }
 
             @Override
@@ -101,6 +120,8 @@ public class WebViewActivity extends Activity {
     }
 
     // Intercepts requests to ASSET_HOST and serves them from the APK's assets/www/ directory.
+    // Includes SPA fallback: paths without a file extension that don't match a real asset
+    // are served as index.html so client-side routers work correctly.
     private WebResourceResponse maybeServeAsset(Uri uri) {
         if (!ASSET_HOST.equals(uri.getScheme() + "://" + uri.getHost())) {
             return null;
@@ -111,12 +132,23 @@ public class WebViewActivity extends Activity {
         }
         // Strip leading slash; resolve under assets/www/
         String assetPath = ASSET_PREFIX + path;
+        AssetManager am = getAssets();
         try {
-            AssetManager am = getAssets();
             InputStream is = am.open(assetPath);
             String mimeType = guessMimeType(path);
             return new WebResourceResponse(mimeType, "utf-8", is);
         } catch (IOException e) {
+            // SPA fallback: if the path has no file extension it is a client-side route
+            // (e.g. /settings, /chat). Serve index.html and let the JS router handle it.
+            String leaf = path.substring(path.lastIndexOf('/') + 1);
+            if (!leaf.contains(".")) {
+                try {
+                    InputStream is = am.open(ASSET_PREFIX + "/index.html");
+                    return new WebResourceResponse("text/html", "utf-8", is);
+                } catch (IOException e2) {
+                    Log.e(TAG, "SPA fallback failed — index.html missing");
+                }
+            }
             Log.w(TAG, "Asset not found: " + assetPath);
             return null;
         }
@@ -162,6 +194,7 @@ public class WebViewActivity extends Activity {
     protected void onResume() {
         super.onResume();
         webView.onResume();
+        applyImmersiveMode();
     }
 
     @Override
@@ -195,6 +228,17 @@ public class WebViewActivity extends Activity {
             Log.d(TAG, "No config.json or no start_url, loading local assets");
         }
         return ASSETS_INDEX;
+    }
+
+    private void applyImmersiveMode() {
+        getWindow().getDecorView().setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+            | View.SYSTEM_UI_FLAG_FULLSCREEN
+            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        );
     }
 
     // NativeBridge is the JavaScript interface registered as window.NativeBridge.

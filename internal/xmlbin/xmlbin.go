@@ -50,7 +50,8 @@ const (
 	AttrVersionName      = uint32(0x0101021c)
 	AttrMinSDKVersion    = uint32(0x0101020c)
 	AttrTargetSDKVersion = uint32(0x01010270)
-	AttrAllowBackup      = uint32(0x01010280)
+	AttrAllowBackup          = uint32(0x01010280)
+	AttrHardwareAccelerated  = uint32(0x010102d3)
 )
 
 // androidNS is the standard Android attribute namespace URI.
@@ -501,11 +502,13 @@ func EncodeManifest(p ManifestParams) []byte {
 		e.EndElement("", "uses-permission")
 	}
 
-	// <application android:label="@..." android:icon="@..." android:allowBackup="false">
+	// <application android:label="@..." android:icon="@..." android:allowBackup="false"
+	//   android:hardwareAccelerated="true">
 	e.StartElement("", "application", []Attr{
 		AndroidAttr("label", AttrLabel, RefVal(p.AppLabel)),
 		AndroidAttr("icon", AttrIcon, RefVal(p.AppIcon)),
 		AndroidAttr("allowBackup", AttrAllowBackup, BoolVal(false)),
+		AndroidAttr("hardwareAccelerated", AttrHardwareAccelerated, BoolVal(true)),
 	})
 
 	// <activity android:name="..." android:exported="true">
