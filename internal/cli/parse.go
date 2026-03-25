@@ -32,9 +32,9 @@ func ParseCommand() *Options {
 func parseBuild(b *BuildOptions, args []string) []string {
 	fs := flag.NewFlagSet("build", flag.ContinueOnError)
 
-	fs.StringVar(&b.AssetsDir, "assets", "", "local web assets directory")
-	fs.StringVar(&b.URL, "url", "", "remote URL to wrap")
-	fs.StringVar(&b.Manifest, "manifest", "", "path to manifest.json (auto-detected if not set)")
+	fs.StringVar(&b.Source, "source", "", "local assets directory or remote PWA URL")
+	fs.StringVar(&b.Source, "s", "", "local assets directory or remote PWA URL")
+	fs.StringVar(&b.Manifest, "manifest", "", "path to manifest.json (local only; auto-detected if not set)")
 	fs.StringVar(&b.Name, "name", "", "app display name")
 	fs.StringVar(&b.PackageName, "package", "", "Android package name (required)")
 	fs.IntVar(&b.VersionCode, "version-code", 0, "version code integer (default 1)")

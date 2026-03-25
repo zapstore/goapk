@@ -142,9 +142,9 @@ func TestBuild_URLMode(t *testing.T) {
 }
 
 func TestConfigFromCLI_ManifestAutoDetect(t *testing.T) {
-	cfg, err := ConfigFromCLI(
-		testPWADir,       // assetsDir
-		"",               // url
+	cfg, cleanup, err := ConfigFromCLI(
+		context.Background(),
+		testPWADir,       // source (local)
 		"",               // manifest (auto-detect)
 		"",               // name (from manifest)
 		"com.example.t",  // package
@@ -158,6 +158,7 @@ func TestConfigFromCLI_ManifestAutoDetect(t *testing.T) {
 		"",               // keystorePass
 		"out.apk",        // output
 	)
+	defer cleanup()
 	if err != nil {
 		t.Fatalf("ConfigFromCLI: %v", err)
 	}

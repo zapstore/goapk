@@ -55,20 +55,23 @@ func run(ctx context.Context) int {
 func runBuild(ctx context.Context, opts *cli.Options) int {
 	b := opts.Build
 
-	// Resolve keystore password from flag or environment
 	ksPass := b.KeystorePass
 	if ksPass == "" {
 		ksPass = os.Getenv("KEYSTORE_PASSWORD")
 	}
 
-	cfg, err := build.ConfigFromCLI(
-		b.AssetsDir, b.URL, b.Manifest,
+	cfg, cleanup, err := build.ConfigFromCLI(
+		ctx,
+		b.Source, b.Manifest,
 		b.Name, b.PackageName, b.VersionName,
 		b.VersionCode, b.MinSDK, b.TargetSDK,
 		b.Icon, b.IconMono,
 		b.Keystore, ksPass,
 		b.Output,
 	)
+	if cleanup != nil {
+		defer cleanup()
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		return 1
@@ -117,9 +120,8 @@ Usage:
   goapk version                       Print version
 
 Build flags:
-  --assets <dir>          Local web assets directory
-  --url <url>             Remote URL to wrap (alternative to --assets)
-  --manifest <file>       Path to manifest.json (auto-detected in --assets dir)
+  -s, --source <dir|url>  Local web assets directory or remote PWA URL
+  --manifest <file>       Path to manifest.json (local only; auto-detected)
   --name <name>           App display name (overrides manifest.json)
   --package <pkg>         Android package name, e.g. com.example.app (required)
   --version-code <n>      Version code integer (default 1)
@@ -137,17 +139,18 @@ Keygen flags:
 
 Examples:
   # Wrap a local PWA (manifest.json auto-detected):
-  goapk build --assets ./dist --package com.example.app app.apk
+  goapk build -s ./dist --package com.example.app app.apk
 
-  # Wrap a remote URL:
-  goapk build --url https://example.com --name "Example" --package com.example.app \
-    --icon icon.png example.apk
+  # Wrap a remote PWA (manifest + icons auto-discovered):
+  goapk build -s https://example.com --package com.example.app example.apk
 
-  # Generate a release keystore (no password):
-  goapk keygen --cn "My Company" release.keystore
+  # Override name and icon for a remote PWA:
+  goapk build -s https://example.com --name "Example" --icon icon.png \
+    --package com.example.app example.apk
 
-  # Generate a release keystore (with password):
+  # Generate a release keystore:
   KEYSTORE_PASSWORD=secret goapk keygen --cn "My Company" release.keystore
-  KEYSTORE_PASSWORD=secret goapk build --keystore release.keystore --package com.example.app app.apk
+  KEYSTORE_PASSWORD=secret goapk build --keystore release.keystore \
+    -s ./dist --package com.example.app app.apk
 `, getVersion())
 }

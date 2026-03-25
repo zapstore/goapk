@@ -26,7 +26,7 @@ func TestValidate(t *testing.T) {
 		{"empty name", func(c *BuildConfig) { c.AppName = "" }, "app name"},
 		{"bad package", func(c *BuildConfig) { c.PackageName = "invalid" }, "package name"},
 		{"low minsdk", func(c *BuildConfig) { c.MinSDK = 21 }, "min SDK"},
-		{"no content", func(c *BuildConfig) { c.AssetsDir = ""; c.RemoteURL = "" }, "assets"},
+		{"no content", func(c *BuildConfig) { c.AssetsDir = ""; c.RemoteURL = "" }, "source"},
 		{"no icon", func(c *BuildConfig) { c.IconColor = "" }, "icon"},
 		{"no output", func(c *BuildConfig) { c.OutputPath = "" }, "output"},
 	}

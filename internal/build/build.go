@@ -12,11 +12,12 @@
 package build
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -166,19 +167,26 @@ func Build(ctx context.Context, cfg *config.BuildConfig) error {
 	return nil
 }
 
-// ConfigFromCLI resolves a BuildConfig from CLI options, reading manifest.json if available.
-// CLI flags always override manifest.json fields.
+// IsRemoteSource returns true when source looks like a URL (http:// or https://).
+func IsRemoteSource(source string) bool {
+	return strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://")
+}
+
+// ConfigFromCLI resolves a BuildConfig from CLI options.
+// source is either a local assets directory or a remote URL; detection is automatic.
+// For remote URLs the page is fetched, its <link rel="manifest"> is discovered,
+// and manifest metadata + icons are downloaded.
+// The returned cleanup function removes any temp files (call it after Build).
 func ConfigFromCLI(
-	assetsDir, remoteURL, manifestPath string,
+	ctx context.Context,
+	source, manifestPath string,
 	name, pkg, versionName string,
 	versionCode, minSDK, targetSDK int,
 	iconColor, iconMono string,
 	keystorePath, keystorePass string,
 	outputPath string,
-) (*config.BuildConfig, error) {
+) (*config.BuildConfig, func(), error) {
 	cfg := &config.BuildConfig{
-		AssetsDir:    assetsDir,
-		RemoteURL:    remoteURL,
 		PackageName:  pkg,
 		AppName:      name,
 		VersionCode:  versionCode,
@@ -192,38 +200,110 @@ func ConfigFromCLI(
 		OutputPath:   outputPath,
 	}
 
-	// Try to load manifest.json — from explicit path or auto-detect in assets dir
-	if manifestPath == "" && assetsDir != "" {
-		if found, _ := manifest.FindInDir(assetsDir); found != "" {
-			manifestPath = found
-		}
-	}
-	if manifestPath != "" {
-		mf, err := manifest.ParseFile(manifestPath)
+	cleanup := func() {}
+
+	if IsRemoteSource(source) {
+		cfg.RemoteURL = source
+
+		mf, manifestURL, err := manifest.FetchFromURL(ctx, source)
 		if err != nil {
-			return nil, fmt.Errorf("reading manifest.json: %w", err)
+			return nil, cleanup, fmt.Errorf("discovering manifest: %w", err)
 		}
-		// Fill in from manifest only where CLI didn't provide values
+
 		if cfg.AppName == "" {
 			cfg.AppName = mf.AppName()
 		}
+
+		// Download icons to a temp dir when CLI didn't supply them
+		tmpDir, err := os.MkdirTemp("", "goapk-*")
+		if err != nil {
+			return nil, cleanup, fmt.Errorf("creating temp dir: %w", err)
+		}
+		cleanup = func() { os.RemoveAll(tmpDir) }
+
 		if cfg.IconColor == "" {
 			if ic := mf.BestIcon("any"); ic != nil {
-				cfg.IconColor = resolveIconPath(ic.Src, manifestPath, assetsDir)
+				u := manifest.ResolveIconURL(ic.Src, manifestURL)
+				if u != "" {
+					p, err := downloadFile(ctx, u, tmpDir, "icon-color-*.png")
+					if err != nil {
+						return nil, cleanup, fmt.Errorf("downloading icon: %w", err)
+					}
+					cfg.IconColor = p
+				}
 			}
 		}
 		if cfg.IconMono == "" {
 			if ic := mf.BestIcon("monochrome"); ic != nil {
-				cfg.IconMono = resolveIconPath(ic.Src, manifestPath, assetsDir)
+				u := manifest.ResolveIconURL(ic.Src, manifestURL)
+				if u != "" {
+					p, err := downloadFile(ctx, u, tmpDir, "icon-mono-*.png")
+					if err != nil {
+						return nil, cleanup, fmt.Errorf("downloading monochrome icon: %w", err)
+					}
+					cfg.IconMono = p
+				}
+			}
+		}
+	} else {
+		cfg.AssetsDir = source
+
+		if manifestPath == "" && source != "" {
+			if found, _ := manifest.FindInDir(source); found != "" {
+				manifestPath = found
+			}
+		}
+		if manifestPath != "" {
+			mf, err := manifest.ParseFile(manifestPath)
+			if err != nil {
+				return nil, cleanup, fmt.Errorf("reading manifest.json: %w", err)
+			}
+			if cfg.AppName == "" {
+				cfg.AppName = mf.AppName()
+			}
+			if cfg.IconColor == "" {
+				if ic := mf.BestIcon("any"); ic != nil {
+					cfg.IconColor = resolveIconPath(ic.Src, manifestPath, source)
+				}
+			}
+			if cfg.IconMono == "" {
+				if ic := mf.BestIcon("monochrome"); ic != nil {
+					cfg.IconMono = resolveIconPath(ic.Src, manifestPath, source)
+				}
 			}
 		}
 	}
 
 	cfg.Defaults()
 	if err := cfg.Validate(); err != nil {
-		return nil, err
+		return nil, cleanup, err
 	}
-	return cfg, nil
+	return cfg, cleanup, nil
+}
+
+// downloadFile fetches rawURL into a temp file under dir and returns the path.
+func downloadFile(ctx context.Context, rawURL, dir, pattern string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d fetching %s", resp.StatusCode, rawURL)
+	}
+	f, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		return "", err
+	}
+	return f.Name(), nil
 }
 
 // packAssets gathers web asset files to include in the APK under assets/www/
@@ -367,19 +447,3 @@ func densityArrays() (sizes []int, names []string, suffixes []string) {
 	return
 }
 
-// ResolveConfig is like ConfigFromCLI but accepts a pre-parsed manifest path for testing.
-// Exported for use in tests.
-func ResolveConfig(cfg *config.BuildConfig, manifestPath string) error {
-	if manifestPath == "" {
-		return nil
-	}
-	mf, err := manifest.ParseFile(manifestPath)
-	if err != nil {
-		return err
-	}
-	if cfg.AppName == "" {
-		cfg.AppName = mf.AppName()
-	}
-	_ = bytes.NewBuffer // keep import
-	return nil
-}

@@ -82,7 +82,7 @@ func (c *BuildConfig) Validate() error {
 		return fmt.Errorf("target SDK (%d) must be >= min SDK (%d)", c.TargetSDK, c.MinSDK)
 	}
 	if c.AssetsDir == "" && c.RemoteURL == "" {
-		return fmt.Errorf("either --assets or --url is required")
+		return fmt.Errorf("--source is required (local directory or remote URL)")
 	}
 	if c.IconColor == "" {
 		return fmt.Errorf("an icon is required (--icon or manifest.json icons)")

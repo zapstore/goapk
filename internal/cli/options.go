@@ -28,10 +28,9 @@ type GlobalOptions struct {
 
 // BuildOptions are flags for the `build` subcommand.
 type BuildOptions struct {
-	// Content
-	AssetsDir string
-	URL       string
-	Manifest  string // explicit manifest.json path; auto-detected if empty
+	// Content — local directory or remote PWA URL
+	Source   string
+	Manifest string // explicit manifest.json path (local only); auto-detected if empty
 
 	// App identity (override manifest.json)
 	Name        string
