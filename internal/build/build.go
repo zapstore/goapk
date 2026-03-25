@@ -273,7 +273,22 @@ func packAssets(cfg *config.BuildConfig) ([]apkzip.Entry, error) {
 	return entries, err
 }
 
-// loadOrGenerateKeystore returns the keystore specified in cfg, or generates a debug key.
+// debugKeystorePath returns the path to the persistent per-user debug keystore.
+// It lives at ~/.goapk/debug.keystore so it survives across builds.
+func debugKeystorePath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(home, ".goapk")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "debug.keystore"), nil
+}
+
+// loadOrGenerateKeystore returns the keystore specified in cfg, or loads/creates
+// the persistent debug keystore at ~/.goapk/debug.keystore.
 func loadOrGenerateKeystore(cfg *config.BuildConfig) (*sign.Keystore, error) {
 	if cfg.KeystorePath != "" {
 		pass := cfg.KeystorePass
@@ -282,7 +297,17 @@ func loadOrGenerateKeystore(cfg *config.BuildConfig) (*sign.Keystore, error) {
 		}
 		return sign.LoadKeystore(cfg.KeystorePath, pass)
 	}
-	return sign.GenerateDebugKeystore()
+
+	path, err := debugKeystorePath()
+	if err != nil {
+		return sign.GenerateDebugKeystore()
+	}
+
+	if _, err := os.Stat(path); err == nil {
+		return sign.LoadKeystore(path, "")
+	}
+
+	return sign.GenerateKeystore(path, "Android Debug", "")
 }
 
 // writeAtomic writes data to path by writing to a temp file and renaming.
@@ -308,10 +333,18 @@ func writeAtomic(path string, data []byte) error {
 	return os.Rename(tmpPath, path)
 }
 
-// resolveIconPath converts an icon src (relative to manifest.json or assets dir) to a
-// file system path.
+// resolveIconPath converts an icon src (relative or root-relative to the assets dir) to a
+// file system path. Root-relative paths (starting with "/") are resolved against assetsDir.
+// Absolute URLs (http/https) cannot be resolved to a local file and return "".
 func resolveIconPath(src, manifestPath, assetsDir string) string {
-	if strings.HasPrefix(src, "/") || strings.HasPrefix(src, "http") {
+	if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
+		return ""
+	}
+	// Root-relative path: /icon.png → assetsDir/icon.png
+	if strings.HasPrefix(src, "/") {
+		if assetsDir != "" {
+			return filepath.Join(assetsDir, src[1:])
+		}
 		return ""
 	}
 	base := assetsDir

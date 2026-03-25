@@ -45,19 +45,30 @@ func parseBuild(b *BuildOptions, args []string) []string {
 	fs.IntVar(&b.TargetSDK, "target-sdk", 0, "target API level (default 35)")
 	fs.StringVar(&b.Keystore, "keystore", "", "PKCS12 keystore path (debug key generated if omitted)")
 	fs.StringVar(&b.KeystorePass, "keystore-pass", "", "keystore password (or KEYSTORE_PASSWORD env var)")
-	fs.StringVar(&b.Output, "output", "", "output APK path (required)")
 
 	// Ignore parse errors; unrecognised flags fall through to positional args
 	_ = fs.Parse(args)
-	return fs.Args()
+	positional := fs.Args()
+	if len(positional) > 0 {
+		b.Output = positional[0]
+		positional = positional[1:]
+	}
+	return positional
 }
 
 func parseKeygen(k *KeygenOptions, args []string) []string {
 	fs := flag.NewFlagSet("keygen", flag.ContinueOnError)
 
-	fs.StringVar(&k.Output, "output", "release.keystore", "output keystore path")
 	fs.StringVar(&k.CN, "cn", "Android Release", "certificate common name")
 
 	_ = fs.Parse(args)
-	return fs.Args()
+	positional := fs.Args()
+	if len(positional) > 0 {
+		k.Output = positional[0]
+		positional = positional[1:]
+	}
+	if k.Output == "" {
+		k.Output = "release.keystore"
+	}
+	return positional
 }

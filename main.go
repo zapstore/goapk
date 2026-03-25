@@ -96,7 +96,8 @@ func runKeygen(opts *cli.Options) int {
 		cn = "Android Release"
 	}
 
-	ks, err := sign.GenerateKeystore(k.Output, cn, "android")
+	pass := os.Getenv("KEYSTORE_PASSWORD")
+	ks, err := sign.GenerateKeystore(k.Output, cn, pass)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating keystore: %s\n", err)
 		return 1
@@ -111,9 +112,9 @@ func printUsage() {
 	fmt.Printf(`goapk %s — wrap any webapp into a signed Android APK
 
 Usage:
-  goapk build [flags]     Build an APK from web assets or a URL
-  goapk keygen [flags]    Generate a release keystore
-  goapk version           Print version
+  goapk build [flags] <output.apk>    Build an APK from web assets or a URL
+  goapk keygen [flags] [output.p12]   Generate a release keystore
+  goapk version                       Print version
 
 Build flags:
   --assets <dir>          Local web assets directory
@@ -129,21 +130,24 @@ Build flags:
   --target-sdk <n>        Target API level (default 35)
   --keystore <file>       PKCS12 keystore path (debug key auto-generated if omitted)
   --keystore-pass <pass>  Keystore password (or KEYSTORE_PASSWORD env var)
-  --output <file>         Output APK path (required)
 
 Keygen flags:
-  --output <file>         Output keystore path (default: release.keystore)
   --cn <name>             Certificate common name (default: "Android Release")
+  KEYSTORE_PASSWORD env   Password to encrypt the keystore (default: no password)
 
 Examples:
   # Wrap a local PWA (manifest.json auto-detected):
-  goapk build --assets ./dist/ --package com.example.app --output app.apk
+  goapk build --assets ./dist --package com.example.app app.apk
 
   # Wrap a remote URL:
   goapk build --url https://example.com --name "Example" --package com.example.app \
-    --icon icon.png --output example.apk
+    --icon icon.png example.apk
 
-  # Generate a release keystore:
-  goapk keygen --output release.keystore --cn "My Company"
+  # Generate a release keystore (no password):
+  goapk keygen --cn "My Company" release.keystore
+
+  # Generate a release keystore (with password):
+  KEYSTORE_PASSWORD=secret goapk keygen --cn "My Company" release.keystore
+  KEYSTORE_PASSWORD=secret goapk build --keystore release.keystore --package com.example.app app.apk
 `, getVersion())
 }
