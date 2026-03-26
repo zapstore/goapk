@@ -10,24 +10,6 @@ Download one binary, produce a signed APK.
 
 ## Install
 
-### Download a pre-built binary
-
-Grab the latest release for your platform from the [releases page](https://github.com/zapstore/goapk/releases) and put it on your `PATH`:
-
-```bash
-# macOS (Apple Silicon)
-curl -L https://github.com/zapstore/goapk/releases/latest/download/goapk-darwin-arm64 -o goapk
-chmod +x goapk
-sudo mv goapk /usr/local/bin/
-
-# Linux (x86-64)
-curl -L https://github.com/zapstore/goapk/releases/latest/download/goapk-linux-amd64 -o goapk
-chmod +x goapk
-sudo mv goapk /usr/local/bin/
-```
-
-### Install from source
-
 Requires Go 1.25+:
 
 ```bash
