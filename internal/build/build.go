@@ -27,6 +27,7 @@ import (
 	"github.com/zapstore/goapk/internal/embed"
 	"github.com/zapstore/goapk/internal/icon"
 	"github.com/zapstore/goapk/internal/manifest"
+	"github.com/zapstore/goapk/internal/permissions"
 	"github.com/zapstore/goapk/internal/res"
 	"github.com/zapstore/goapk/internal/sign"
 	apkzip "github.com/zapstore/goapk/internal/zip"
@@ -74,7 +75,10 @@ func Build(ctx context.Context, cfg *config.BuildConfig) error {
 	}
 
 	// ---- Stage 2: Binary XML (AndroidManifest.xml) ----
-	permissions := []string{"android.permission.INTERNET"}
+	androidPerms, err := permissions.Resolve(cfg.WebPermissions)
+	if err != nil {
+		return fmt.Errorf("resolving permissions: %w", err)
+	}
 	manifestBytes := xmlbin.EncodeManifest(xmlbin.ManifestParams{
 		Package:       cfg.PackageName,
 		VersionCode:   int32(cfg.VersionCode),
@@ -84,7 +88,7 @@ func Build(ctx context.Context, cfg *config.BuildConfig) error {
 		AppLabel:      config.ResIDAppName,
 		AppIcon:       config.ResIDIconColor,
 		ActivityClass: cfg.ActivityClass(),
-		Permissions:   permissions,
+		Permissions:   androidPerms,
 	})
 
 	// ---- Stage 3: resources.arsc ----
@@ -183,6 +187,7 @@ func ConfigFromCLI(
 	name, pkg, versionName string,
 	versionCode, minSDK, targetSDK int,
 	iconColor, iconMono string,
+	cliPermissions string,
 	keystorePath, keystorePass string,
 	outputPath string,
 ) (*config.BuildConfig, func(), error) {
@@ -198,6 +203,17 @@ func ConfigFromCLI(
 		KeystorePath: keystorePath,
 		KeystorePass: keystorePass,
 		OutputPath:   outputPath,
+	}
+
+	// Parse CLI --permissions flag (comma-separated web permission names)
+	var cliPerms []string
+	if cliPermissions != "" {
+		for _, p := range strings.Split(cliPermissions, ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				cliPerms = append(cliPerms, p)
+			}
+		}
 	}
 
 	cleanup := func() {}
@@ -245,6 +261,8 @@ func ConfigFromCLI(
 				}
 			}
 		}
+
+		cfg.WebPermissions = mergePermissions(mf.Permissions, cliPerms)
 	} else {
 		cfg.AssetsDir = source
 
@@ -253,6 +271,7 @@ func ConfigFromCLI(
 				manifestPath = found
 			}
 		}
+		var manifestPerms []string
 		if manifestPath != "" {
 			mf, err := manifest.ParseFile(manifestPath)
 			if err != nil {
@@ -271,7 +290,9 @@ func ConfigFromCLI(
 					cfg.IconMono = resolveIconPath(ic.Src, manifestPath, source)
 				}
 			}
+			manifestPerms = mf.Permissions
 		}
+		cfg.WebPermissions = mergePermissions(manifestPerms, cliPerms)
 	}
 
 	cfg.Defaults()
@@ -435,6 +456,26 @@ func resolveIconPath(src, manifestPath, assetsDir string) string {
 		return src
 	}
 	return filepath.Join(base, src)
+}
+
+// mergePermissions combines manifest-declared and CLI-provided web permission names,
+// deduplicating while preserving order (manifest first, then CLI additions).
+func mergePermissions(manifestPerms, cliPerms []string) []string {
+	seen := map[string]bool{}
+	var merged []string
+	for _, p := range manifestPerms {
+		if !seen[p] {
+			seen[p] = true
+			merged = append(merged, p)
+		}
+	}
+	for _, p := range cliPerms {
+		if !seen[p] {
+			seen[p] = true
+			merged = append(merged, p)
+		}
+	}
+	return merged
 }
 
 // densityArrays returns parallel slices of sizes, density names, and APK directory suffixes.

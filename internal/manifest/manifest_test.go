@@ -52,6 +52,37 @@ func TestParse_ShortNameFallback(t *testing.T) {
 	}
 }
 
+func TestParse_Permissions(t *testing.T) {
+	raw := []byte(`{
+		"name": "Perm App",
+		"permissions": ["camera", "microphone", "geolocation"]
+	}`)
+	m, err := Parse(raw)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(m.Permissions) != 3 {
+		t.Fatalf("Permissions len = %d, want 3", len(m.Permissions))
+	}
+	want := map[string]bool{"camera": true, "microphone": true, "geolocation": true}
+	for _, p := range m.Permissions {
+		if !want[p] {
+			t.Errorf("unexpected permission %q", p)
+		}
+	}
+}
+
+func TestParse_NoPermissions(t *testing.T) {
+	raw := []byte(`{"name": "No Perms"}`)
+	m, err := Parse(raw)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(m.Permissions) != 0 {
+		t.Errorf("Permissions = %v, want empty", m.Permissions)
+	}
+}
+
 func TestLargestDimension(t *testing.T) {
 	tests := []struct {
 		sizes string

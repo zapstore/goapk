@@ -41,6 +41,7 @@ func parseBuild(b *BuildOptions, args []string) []string {
 	fs.StringVar(&b.VersionName, "version-name", "", "version name string (default \"1.0\")")
 	fs.StringVar(&b.Icon, "icon", "", "color icon PNG path")
 	fs.StringVar(&b.IconMono, "icon-mono", "", "monochrome icon PNG path")
+	fs.StringVar(&b.Permissions, "permissions", "", "comma-separated web permissions (e.g. camera,microphone,geolocation)")
 	fs.IntVar(&b.MinSDK, "min-sdk", 0, "minimum API level (default 24)")
 	fs.IntVar(&b.TargetSDK, "target-sdk", 0, "target API level (default 35)")
 	fs.StringVar(&b.Keystore, "keystore", "", "PKCS12 keystore path (debug key generated if omitted)")

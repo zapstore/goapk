@@ -1,0 +1,5 @@
+testdata/pwas/citadelchat
+
+*.apk
+
+./goapk

@@ -42,6 +42,9 @@ type BuildOptions struct {
 	Icon     string // color icon PNG
 	IconMono string // monochrome icon PNG
 
+	// Permissions — comma-separated web permission names (e.g. "camera,microphone,geolocation")
+	Permissions string
+
 	// SDK
 	MinSDK    int
 	TargetSDK int

@@ -47,6 +47,10 @@ type BuildConfig struct {
 	AssetsDir string // path to local web assets directory (may be empty)
 	RemoteURL string // remote URL to load at runtime (may be empty)
 
+	// Permissions — web permission names (e.g. "camera", "geolocation")
+	// Resolved to Android permissions at build time.
+	WebPermissions []string
+
 	// Icons — paths to source PNG files; at least one of IconColor must be set
 	IconColor string // color (any-purpose) icon PNG path
 	IconMono  string // monochrome icon PNG path (optional)

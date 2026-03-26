@@ -12,15 +12,16 @@ import (
 
 // Manifest represents the parsed fields of a Web App Manifest relevant to APK building.
 type Manifest struct {
-	Name            string `json:"name"`
-	ShortName       string `json:"short_name"`
-	StartURL        string `json:"start_url"`
-	Display         string `json:"display"`
-	ThemeColor      string `json:"theme_color"`
-	BackgroundColor string `json:"background_color"`
-	Lang            string `json:"lang"`
-	Description     string `json:"description"`
-	Icons           []Icon `json:"icons"`
+	Name            string   `json:"name"`
+	ShortName       string   `json:"short_name"`
+	StartURL        string   `json:"start_url"`
+	Display         string   `json:"display"`
+	ThemeColor      string   `json:"theme_color"`
+	BackgroundColor string   `json:"background_color"`
+	Lang            string   `json:"lang"`
+	Description     string   `json:"description"`
+	Icons           []Icon   `json:"icons"`
+	Permissions     []string `json:"permissions"`
 }
 
 // Icon represents a single icon entry in the manifest.

@@ -154,6 +154,7 @@ func TestConfigFromCLI_ManifestAutoDetect(t *testing.T) {
 		0,                // targetSDK
 		"",               // iconColor (from manifest)
 		"",               // iconMono
+		"",               // permissions
 		"",               // keystore
 		"",               // keystorePass
 		"out.apk",        // output

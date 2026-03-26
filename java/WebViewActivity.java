@@ -12,15 +12,19 @@ package com.zapstore.goapk.runtime;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
 import android.webkit.MimeTypeMap;
+import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -34,6 +38,10 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class WebViewActivity extends Activity {
 
@@ -45,7 +53,21 @@ public class WebViewActivity extends Activity {
     // APK asset prefix that maps to the virtual origin root.
     private static final String ASSET_PREFIX = "www";
 
+    private static final int REQUEST_CODE_PERMISSIONS = 1001;
+
+    // Maps WebKit resource strings to Android manifest permissions.
+    private static final Map<String, String[]> WEBKIT_TO_ANDROID = new HashMap<>();
+    static {
+        WEBKIT_TO_ANDROID.put(PermissionRequest.RESOURCE_VIDEO_CAPTURE,
+            new String[]{"android.permission.CAMERA"});
+        WEBKIT_TO_ANDROID.put(PermissionRequest.RESOURCE_AUDIO_CAPTURE,
+            new String[]{"android.permission.RECORD_AUDIO"});
+    }
+
     private WebView webView;
+    private PermissionRequest pendingPermissionRequest;
+    private GeolocationPermissions.Callback pendingGeoCallback;
+    private String pendingGeoOrigin;
 
     @Override
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
@@ -75,6 +97,7 @@ public class WebViewActivity extends Activity {
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        settings.setGeolocationEnabled(true);
 
         // Inform WebView of device connectivity so navigator.onLine works correctly.
         webView.setNetworkAvailable(true);
@@ -82,7 +105,51 @@ public class WebViewActivity extends Activity {
         // Register the native bridge for extensions
         webView.addJavascriptInterface(new NativeBridge(), "NativeBridge");
 
-        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(final PermissionRequest request) {
+                String[] resources = request.getResources();
+                List<String> needed = new ArrayList<>();
+                for (String res : resources) {
+                    String[] androidPerms = WEBKIT_TO_ANDROID.get(res);
+                    if (androidPerms != null) {
+                        for (String perm : androidPerms) {
+                            if (checkSelfPermission(perm) != PackageManager.PERMISSION_GRANTED) {
+                                needed.add(perm);
+                            }
+                        }
+                    }
+                }
+
+                if (needed.isEmpty()) {
+                    request.grant(resources);
+                } else {
+                    pendingPermissionRequest = request;
+                    requestPermissions(needed.toArray(new String[0]), REQUEST_CODE_PERMISSIONS);
+                }
+            }
+
+            @Override
+            public void onPermissionRequestCanceled(PermissionRequest request) {
+                if (pendingPermissionRequest == request) {
+                    pendingPermissionRequest = null;
+                }
+            }
+
+            @Override
+            public void onGeolocationPermissionsShowPrompt(String origin,
+                    GeolocationPermissions.Callback callback) {
+                String perm = "android.permission.ACCESS_FINE_LOCATION";
+                if (checkSelfPermission(perm) == PackageManager.PERMISSION_GRANTED) {
+                    callback.invoke(origin, true, false);
+                } else {
+                    pendingGeoCallback = callback;
+                    pendingGeoOrigin = origin;
+                    requestPermissions(new String[]{perm}, REQUEST_CODE_PERMISSIONS);
+                }
+            }
+        });
+
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view,
@@ -117,6 +184,38 @@ public class WebViewActivity extends Activity {
         String startUrl = resolveStartUrl();
         Log.i(TAG, "Loading: " + startUrl);
         webView.loadUrl(startUrl);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                                           int[] grantResults) {
+        if (requestCode != REQUEST_CODE_PERMISSIONS) {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+            return;
+        }
+
+        boolean allGranted = true;
+        for (int result : grantResults) {
+            if (result != PackageManager.PERMISSION_GRANTED) {
+                allGranted = false;
+                break;
+            }
+        }
+
+        if (pendingPermissionRequest != null) {
+            if (allGranted) {
+                pendingPermissionRequest.grant(pendingPermissionRequest.getResources());
+            } else {
+                pendingPermissionRequest.deny();
+            }
+            pendingPermissionRequest = null;
+        }
+
+        if (pendingGeoCallback != null) {
+            pendingGeoCallback.invoke(pendingGeoOrigin, allGranted, false);
+            pendingGeoCallback = null;
+            pendingGeoOrigin = null;
+        }
     }
 
     // Intercepts requests to ASSET_HOST and serves them from the APK's assets/www/ directory.

@@ -66,6 +66,7 @@ func runBuild(ctx context.Context, opts *cli.Options) int {
 		b.Name, b.PackageName, b.VersionName,
 		b.VersionCode, b.MinSDK, b.TargetSDK,
 		b.Icon, b.IconMono,
+		b.Permissions,
 		b.Keystore, ksPass,
 		b.Output,
 	)
@@ -128,6 +129,8 @@ Build flags:
   --version-name <s>      Version name string (default "1.0")
   --icon <file>           Color icon PNG (overrides manifest.json icons)
   --icon-mono <file>      Monochrome icon PNG
+  --permissions <list>    Comma-separated web permissions (camera,microphone,geolocation,
+                          notifications,nfc,bluetooth,background-sync)
   --min-sdk <n>           Minimum API level (default 24)
   --target-sdk <n>        Target API level (default 35)
   --keystore <file>       PKCS12 keystore path (debug key auto-generated if omitted)
