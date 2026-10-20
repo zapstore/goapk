@@ -4,3 +4,4 @@ testdata/pwas/citadelchat
 
 ./goapk
 dist/
+.DS_Store
