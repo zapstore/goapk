@@ -5,3 +5,6 @@ testdata/pwas/citadelchat
 ./goapk
 dist/
 .DS_Store
+
+# Specs stay local
+SPEC.md
