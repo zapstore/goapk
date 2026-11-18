@@ -23,7 +23,7 @@ go vet ./...             # Lint
 go mod tidy              # After dependency changes
 make dex                 # Recompile WebView activity DEX (requires Android SDK)
 make                     # Build for current platform
-make all                 # Cross-compile all targets
+make help                # List targets; make build compiles and links on this machine
 ```
 
 ## Embedded Artifacts
